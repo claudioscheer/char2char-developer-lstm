@@ -1,4 +1,4 @@
 {
-    "python.pythonPath": "~/miniconda/envs/dnn/bin/python",
+    "python.pythonPath": "/home/water/miniconda/envs/dnn/bin/python",
     "python.formatting.provider": "black"
 }
