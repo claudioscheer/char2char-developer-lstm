@@ -6,3 +6,10 @@ https://machinelearningmastery.com/how-to-use-an-encoder-decoder-lstm-to-echo-se
 
 https://karpathy.github.io/2015/05/21/rnn-effectiveness/
 https://arxiv.org/pdf/1409.3215v3.pdf
+
+https://karpathy.github.io/2019/04/25/recipe/
+
+https://github.com/LeanManager/NLP-PyTorch
+https://github.com/pranjal52/text_generators
+https://github.com/pranjal52/text_generators/blob/master/a_gigantic_model.ipynb
+https://blog.floydhub.com/long-short-term-memory-from-zero-to-hero-with-pytorch/
