@@ -13,3 +13,9 @@ https://github.com/LeanManager/NLP-PyTorch
 https://github.com/pranjal52/text_generators
 https://github.com/pranjal52/text_generators/blob/master/a_gigantic_model.ipynb
 https://blog.floydhub.com/long-short-term-memory-from-zero-to-hero-with-pytorch/
+
+
+https://discuss.pytorch.org/t/lstm-text-generator-repeats-same-words-over-and-over/43652/7
+https://karpathy.github.io/2015/05/21/rnn-effectiveness/
+https://mlexplained.com/2019/02/15/building-an-lstm-from-scratch-in-pytorch-lstms-in-depth-part-1/
+https://machinelearningmastery.com/faq/single-faq/what-is-the-difference-between-samples-timesteps-and-features-for-lstm-input/
