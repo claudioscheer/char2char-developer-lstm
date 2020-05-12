@@ -6,11 +6,11 @@ class LSTMModel(nn.Module):
     def __init__(self, input_size, output_size):
         super(LSTMModel, self).__init__()
 
-        self.n_layers = 3
-        self.hidden_size = 128
+        self.n_layers = 1
+        self.hidden_size = 32
 
         self.lstm = nn.LSTM(
-            input_size, self.hidden_size, self.n_layers, batch_first=True, dropout=0.5
+            input_size, self.hidden_size, self.n_layers, batch_first=True, dropout=0.0
         )
         self.fc = nn.Linear(self.hidden_size, output_size)
 

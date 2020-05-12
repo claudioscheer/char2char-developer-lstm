@@ -5,7 +5,7 @@ import numpy as np
 
 class CustomDatasetLoader(Dataset):
     def __init__(self, input_path):
-        self.sequence_size = 3
+        self.sequence_size = 1
         self.input_path = input_path
         self.data = self.read_whole_file()
         self.data_len = len(self.data)
@@ -29,6 +29,7 @@ class CustomDatasetLoader(Dataset):
 
         # Map text to int.
         y = self.characters2int(y)
+        # y = self.one_hot_encode(y, self.sequence_size)
         y = torch.tensor(y).cuda()
         return x, y
 
@@ -50,6 +51,9 @@ class CustomDatasetLoader(Dataset):
     def characters2int(self, characters):
         return [self.char2int[c] for c in characters]
 
+    def int2characters(self, characters):
+        return [self.int2char[c] for c in characters]
+
     def one_hot_encode(self, characters, sequence_size):
         encoded = np.zeros([sequence_size, self.unique_characters_length], dtype=int)
         for i, x in enumerate(characters):
@@ -57,4 +61,4 @@ class CustomDatasetLoader(Dataset):
         return encoded
 
     def one_hot_decode(self, characters):
-        return [np.argmax(x) for x in characters.numpy()]
+        return [np.argmax(x) for x in characters]

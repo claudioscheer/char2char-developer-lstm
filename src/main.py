@@ -14,7 +14,7 @@ test_split = int(np.floor(0.15 * dataset_size))  # 15%
 validation_split = int(np.floor(0.15 * dataset_size))  # 15%
 dataset_indices = list(range(dataset_size))
 
-batch_size = 16
+batch_size = 1
 # Shuffle dataset indices. I think this is unnecessary.
 np.random.shuffle(dataset_indices)
 
@@ -28,10 +28,8 @@ train_sampler = SubsetRandomSampler(dataset_indices)
 validation_sampler = SubsetRandomSampler(validation_indices)
 test_sampler = SubsetRandomSampler(test_indices)
 train_loader = DataLoader(latex_dataset, batch_size=batch_size, sampler=train_sampler)
-validation_loader = DataLoader(
-    latex_dataset, batch_size=batch_size, sampler=validation_sampler
-)
-test_loader = DataLoader(latex_dataset, batch_size=batch_size, sampler=test_sampler)
+validation_loader = DataLoader(latex_dataset, batch_size=1, sampler=validation_sampler)
+test_loader = DataLoader(latex_dataset, batch_size=1, sampler=test_sampler)
 
 model = LSTMModel(
     latex_dataset.unique_characters_length, latex_dataset.unique_characters_length
@@ -41,25 +39,51 @@ model.cuda()
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
+
+# def get_metric(x, output, y):
+#     x = latex_dataset.int2characters(
+#         latex_dataset.one_hot_decode(x.squeeze_(0).numpy())
+#     )
+#     y = latex_dataset.int2characters(latex_dataset.one_hot_decode(y.numpy()))
+#     output = latex_dataset.int2characters(latex_dataset.one_hot_decode(output.numpy()))
+#     print(f"({x}, {y}) => {output}")
+
+
 print("Starting train process...")
 
-loss_over_epochs = []
+train_loss_over_epochs = []
+validation_loss_over_epochs = []
 
-n_epochs = 1000
+n_epochs = 300
 for epoch in range(1, n_epochs + 1):
     for batch_index, (x, y) in enumerate(train_loader):
         optimizer.zero_grad()
 
         output, hidden_state = model(x)
-        loss = criterion(output, y.view(-1).long())
-        loss.backward()
+        train_loss = criterion(output, y.view(-1).long())
+        train_loss.backward()
         optimizer.step()
 
+    for batch_index, (x, y) in enumerate(validation_loader):
+        output, hidden_state = model(x)
+        validation_loss = criterion(output, y.view(-1).long())
+
+    train_loss_over_epochs.append(train_loss.item())
+    validation_loss_over_epochs.append(validation_loss.item())
     print("Epoch: {}/{}.............".format(epoch, n_epochs), end=" ")
-    print("Loss: {:.4f}".format(loss.item()))
-    loss_over_epochs.append(loss.item())
+    print("Loss: {:.4f}".format(train_loss.item()))
+
 
 torch.save(model, "../model.pytorch")
 
-plt.plot(loss_over_epochs)
+for batch_index, (x, y) in enumerate(test_loader):
+    output, hidden_state = model(x)
+    test_loss = criterion(output, y.view(-1).long())
+    print("Testing loss: {:.4f}".format(test_loss.item()))
+
+
+plt.plot(train_loss_over_epochs, label="Train loss")
+plt.plot(validation_loss_over_epochs, label="Validation loss")
+plt.legend()
+plt.title("Loss")
 plt.show()
