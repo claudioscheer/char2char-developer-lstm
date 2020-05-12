@@ -5,6 +5,7 @@ import numpy as np
 
 class CustomDatasetLoader(Dataset):
     def __init__(self, input_path):
+        self.sequence_size = 3
         self.input_path = input_path
         self.data = self.read_whole_file()
         self.data_len = len(self.data)
@@ -21,47 +22,39 @@ class CustomDatasetLoader(Dataset):
     def __getitem__(self, index):
         x, y = self.get_dataset_tuple(index)
         # Map text to int.
-        x = self.char2int[x]
+        x = self.characters2int(x)
         # One-hot encode x.
-        x = self.one_hot_encode(x)
+        x = self.one_hot_encode(x, self.sequence_size)
         x = torch.tensor(x).float().cuda()
 
         # Map text to int.
-        y = self.char2int[y]
+        y = self.characters2int(y)
         y = torch.tensor(y).cuda()
         return x, y
 
     def __len__(self):
-        return self.data_len
+        return self.data_len - self.sequence_size
 
     def get_dataset_tuple(self, index):
-        x = self.data[index]
-        y = self.data[index + 1]
+        x = []
+        y = []
+        for j in range(0, self.sequence_size):
+            x.append(self.data[index + j])
+            y.append(self.data[index + j + 1])
         return x, y
 
     def read_whole_file(self):
         with open(self.input_path, mode="r") as file:
             return file.read()
 
-    # def text2int(self, text):
-    #     """
-    #         Convert text to an array of integers.
-    #     """
-    #     return [self.char2int[c] for c in text]
+    def characters2int(self, characters):
+        return [self.char2int[c] for c in characters]
 
-    # def int2text(self, text):
-    #     """
-    #         Convert an array of integers to text.
-    #     """
-    #     return "".join([self.int2char[c] for c in text])
-
-    def one_hot_encode(self, character):
-        encoded = np.zeros([self.unique_characters_length], dtype=int)
-        encoded[character] = 1
+    def one_hot_encode(self, characters, sequence_size):
+        encoded = np.zeros([sequence_size, self.unique_characters_length], dtype=int)
+        for i, x in enumerate(characters):
+            encoded[i][x] = 1
         return encoded
 
-    def one_hot_decode(self, sequence):
-        """
-            sequence: PyTorch tensor.
-        """
-        return [np.argmax(x) for x in sequence.numpy()]
+    def one_hot_decode(self, characters):
+        return [np.argmax(x) for x in characters.numpy()]
