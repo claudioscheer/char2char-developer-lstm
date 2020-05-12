@@ -5,7 +5,7 @@ import numpy as np
 
 class CustomDatasetLoader(Dataset):
     def __init__(self, input_path):
-        self.sequence_size = 1
+        self.sequence_size = 16
         self.input_path = input_path
         self.data = self.read_whole_file()
         self.data_len = len(self.data)

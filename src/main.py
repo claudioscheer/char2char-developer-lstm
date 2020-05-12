@@ -39,33 +39,25 @@ model.cuda()
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 
-
-# def get_metric(x, output, y):
-#     x = latex_dataset.int2characters(
-#         latex_dataset.one_hot_decode(x.squeeze_(0).numpy())
-#     )
-#     y = latex_dataset.int2characters(latex_dataset.one_hot_decode(y.numpy()))
-#     output = latex_dataset.int2characters(latex_dataset.one_hot_decode(output.numpy()))
-#     print(f"({x}, {y}) => {output}")
-
-
 print("Starting train process...")
 
 train_loss_over_epochs = []
 validation_loss_over_epochs = []
 
-n_epochs = 300
+n_epochs = 100
 for epoch in range(1, n_epochs + 1):
     for batch_index, (x, y) in enumerate(train_loader):
+        hidden_states = model.init_hidden_states(batch_size)
         optimizer.zero_grad()
-
-        output, hidden_state = model(x)
+        output, _ = model(x, hidden_states)
         train_loss = criterion(output, y.view(-1).long())
         train_loss.backward()
+        nn.utils.clip_grad_norm_(model.parameters(), 0.5)
         optimizer.step()
 
     for batch_index, (x, y) in enumerate(validation_loader):
-        output, hidden_state = model(x)
+        hidden_states = model.init_hidden_states(1)
+        output, _ = model(x, hidden_states)
         validation_loss = criterion(output, y.view(-1).long())
 
     train_loss_over_epochs.append(train_loss.item())
@@ -76,10 +68,13 @@ for epoch in range(1, n_epochs + 1):
 
 torch.save(model, "../model.pytorch")
 
-for batch_index, (x, y) in enumerate(test_loader):
-    output, hidden_state = model(x)
-    test_loss = criterion(output, y.view(-1).long())
-    print("Testing loss: {:.4f}".format(test_loss.item()))
+model.eval()
+with torch.no_grad():
+    for batch_index, (x, y) in enumerate(test_loader):
+        hidden_states = model.init_hidden_states(1)
+        output, _ = model(x, hidden_states)
+        test_loss = criterion(output, y.view(-1).long())
+        print("Testing loss: {:.4f}".format(test_loss.item()))
 
 
 plt.plot(train_loss_over_epochs, label="Train loss")
