@@ -20,3 +20,5 @@ https://karpathy.github.io/2015/05/21/rnn-effectiveness/
 https://mlexplained.com/2019/02/15/building-an-lstm-from-scratch-in-pytorch-lstms-in-depth-part-1/
 https://machinelearningmastery.com/faq/single-faq/what-is-the-difference-between-samples-timesteps-and-features-for-lstm-input/
 https://colah.github.io/posts/2015-08-Understanding-LSTMs/
+
+https://www.kaggle.com/francescapaulin/character-level-lstm-in-pytorch
