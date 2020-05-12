@@ -6,7 +6,7 @@ from lib.model import LSTMModel
 import numpy as np
 
 
-dataset = RandomDatasetLoader("../dataset/alphabet.txt")
+dataset = RandomDatasetLoader("../dataset/latex.txt")
 
 model = torch.load("../model.pytorch")
 model.cpu()
@@ -61,7 +61,7 @@ def evaluate(model, start_text, prediction_length, temperature=0.8):
     size_prediction = prediction_length - len(start_text)
 
     for p in range(size_prediction):
-        output, hidden = model(inp, previous_hidden_states)
+        output, previous_hidden_states = model(inp, previous_hidden_states)
 
         # Sample from the network as a multinomial distribution
         output_dist = output.data.view(-1).div(temperature).exp()
@@ -76,5 +76,5 @@ def evaluate(model, start_text, prediction_length, temperature=0.8):
 
 
 with torch.no_grad():
-    prediction = evaluate(model, "abcdefghij", 12)
+    prediction = evaluate(model, "\document", 5000)
     print("".join(prediction))

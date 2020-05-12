@@ -16,22 +16,17 @@ class LSTMModel(nn.Module):
             self.hidden_size,
             self.n_layers,
             batch_first=True,
-            dropout=0.5,
+            dropout=0.2,
         )
-        self.dropout = nn.Dropout(0.1)
+        self.dropout = nn.Dropout(0.4)
         self.decoder = nn.Linear(self.hidden_size, output_size)
 
     def forward(self, x, previous_hidden_states):
         x = self.encoder(x.view(1, -1))
-
         output, hidden_states = self.lstm(x.view(1, 1, -1), previous_hidden_states)
-
         output = self.dropout(output)
-
         output = output.contiguous().view(-1, self.hidden_size)
-
         output = self.decoder(output)
-
         return output, hidden_states
 
     def init_hidden_states(self, batch_size, use_gpu=True):

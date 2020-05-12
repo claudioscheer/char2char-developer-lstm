@@ -1,3 +1,4 @@
+import unidecode
 import string
 import torch
 from torch.utils.data.dataset import Dataset
@@ -8,7 +9,7 @@ import random
 
 def read_whole_file(input_path):
     with open(input_path, mode="r") as file:
-        return file.read()
+        return unidecode.unidecode(file.read())
 
 
 class RandomDatasetLoader(Dataset):

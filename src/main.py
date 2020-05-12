@@ -7,12 +7,14 @@ from train import train_model
 
 
 torch.autograd.set_detect_anomaly(True)
-dataset = RandomDatasetLoader("../dataset/alphabet.txt")
+dataset = RandomDatasetLoader("../dataset/latex.txt")
 
 model = LSTMModel(dataset.unique_characters_length, dataset.unique_characters_length)
 model.cuda()
 
 print("Starting train process...")
 
-model = train_model(model, dataset, show_loss_plot=True, n_epochs=3000)
+model = train_model(
+    model, dataset, show_loss_plot=True, n_epochs=1000, sequence_size=256
+)
 torch.save(model, "../model.pytorch")
