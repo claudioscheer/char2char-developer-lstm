@@ -1,0 +1,320 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Address translation interface via ACPI DSM.
+ * Copyright (C) 2018 Intel Corporation
+ *
+ * Specification for this interface is available at:
+ *
+ *	https://cdrdv2.intel.com/v1/dl/getContent/603354
+ */
+
+#include <linux/acpi.h>
+#include <linux/adxl.h>
+
+#define ADXL_REVISION			0x1
+#define ADXL_IDX_GET_ADDR_PARAMS	0x1
+#define ADXL_IDX_FORWARD_TRANSLATE	0x2
+#define ACPI_ADXL_PATH			"\\_SB.ADXL"
+
+/*
+ * The specification doesn't provide a limit on how many
+ * components are in a memory address. But since we allocate
+ * memory based on the number the BIOS tells us, we should
+ * defend against insane values.
+ */
+#define ADXL_MAX_COMPONENTS		500
+
+#undef pr_fmt
+#define pr_fmt(fmt) "ADXL: " fmt
+
+static acpi_handle handle;
+static union acpi_object *params;
+static const guid_t adxl_guid =
+	GUID_INIT(0xAA3C050A, 0x7EA4, 0x4C1F,
+		  0xAF, 0xDA, 0x12, 0x67, 0xDF, 0xD3, 0xD4, 0x8D);
+
+static int adxl_count;
+static char **adxl_component_names;
+
+static union acpi_object *adxl_dsm(int cmd, union acpi_object argv[])
+{
+	union acpi_object *obj, *o;
+
+	obj = acpi_evaluate_dsm_typed(handle, &adxl_guid, ADXL_REVISION,
+				      cmd, argv, ACPI_TYPE_PACKAGE);
+	if (!obj) {
+		pr_info("DSM call failed for cmd=%d\n", cmd);
+		return NULL;
+	}
+
+	if (obj->package.count != 2) {
+		pr_info("Bad pkg count %d\n", obj->package.count);
+		goto err;
+	}
+
+	o = obj->package.elements;
+	if (o->type != ACPI_TYPE_INTEGER) {
+		pr_info("Bad 1st element type %d\n", o->type);
+		goto err;
+	}
+	if (o->integer.value) {
+		pr_info("Bad ret val %llu\n", o->integer.value);
+		goto err;
+	}
+
+	o = obj->package.elements + 1;
+	if (o->type != ACPI_TYPE_PACKAGE) {
+		pr_info("Bad 2nd element type %d\n", o->type);
+		goto err;
+	}
+	return obj;
+
+err:
+	ACPI_FREE(obj);
+	return NULL;
+}
+
+/**
+ * adxl_get_component_names - get list of memory component names
+ * Returns NULL terminated list of string names
+ *
+ * Give the caller a pointer to the list of memory component names
+ * e.g. { "SystemAddress", "ProcessorSocketId", "ChannelId", ... NULL }
+ * Caller should count how many strings in order to allocate a buffer
+ * for the return from adxl_decode().
+ */
+const char * const *adxl_get_component_names(void)
+{
+	return (const char * const *)adxl_component_names;
+}
+EXPORT_SYMBOL_GPL(adxl_get_component_names);
+
+/**
+ * adxl_decode - ask BIOS to decode a system address to memory address
+ * @addr: the address to decode
+ * @component_values: pointer to array of values for each component
+ * Returns 0 on success, negative error code otherwise
+ *
+ * The index of each value returned in the array matches the index of
+ * each component name returned by adxl_get_component_names().
+ * Components that are not defined for this address translation (e.g.
+ * mirror channel number for a non-mirrored address) are set to ~0ull.
+ */
+int adxl_decode(u64 addr, u64 component_values[])
+{
+	union acpi_object argv4[2], *results, *r;
+	int i, cnt;
+
+	if (!adxl_component_names)
+		return -EOPNOTSUPP;
+
+	argv4[0].type = ACPI_TYPE_PACKAGE;
+	argv4[0].package.count = 1;
+	argv4[0].package.elements = &argv4[1];
+	argv4[1].integer.type = ACPI_TYPE_INTEGER;
+	argv4[1].integer.value = addr;
+
+	results = adxl_dsm(ADXL_IDX_FORWARD_TRANSLATE, argv4);
+	if (!results)
+		return -EINVAL;
+
+	r = results->package.elements + 1;
+	cnt = r->package.count;
+	if (cnt != adxl_count) {
+		ACPI_FREE(results);
+		return -EINVAL;
+	}
+	r = r->package.elements;
+
+	for (i = 0; i < cnt; i++)
+		component_values[i] = r[i].integer.value;
+
+	ACPI_FREE(results);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(adxl_decode);
+
+static int __init adxl_init(void)
+{
+	char *path = ACPI_ADXL_PATH;
+	union acpi_object *p;
+	acpi_status status;
+	int i;
+
+	status = acpi_get_handle(NULL, path, &handle);
+	if (ACPI_FAILURE(status)) {
+		pr_debug("No ACPI handle for path %s\n", path);
+		return -ENODEV;
+	}
+
+	if (!acpi_has_method(handle, "_DSM")) {
+		pr_info("No DSM method\n");
+		return -ENODEV;
+	}
+
+	if (!acpi_check_dsm(handle, &adxl_guid, ADXL_REVISION,
+			    ADXL_IDX_GET_ADDR_PARAMS |
+			    ADXL_IDX_FORWARD_TRANSLATE)) {
+		pr_info("DSM method does not support forward translate\n");
+		return -ENODEV;
+	}
+
+	params = adxl_dsm(ADXL_IDX_GET_ADDR_PARAMS, NULL);
+	if (!params) {
+		pr_info("Failed to get component names\n");
+		return -ENODEV;
+	}
+
+	p = params->package.elements + 1;
+	adxl_count = p->package.count;
+	if (adxl_count > ADXL_MAX_COMPONENTS) {
+		pr_info("Insane number of address component names %d\n", adxl_count);
+		ACPI_FREE(params);
+		return -ENODEV;
+	}
+	p = p->package.elements;
+
+	/*
+	 * Allocate one extra for NULL termination.
+	 */
+	adxl_component_names = kcalloc(adxl_count + 1, sizeof(char *), GFP_KERNEL);
+	if (!adxl_component_names) {
+		ACPI_FREE(params);
+		return -ENOMEM;
+	}
+
+	for (i = 0; i < adxl_count; i++)
+		adxl_component_names[i] = p[i].string.pointer;
+
+	return 0;
+}
+subsys_initcall(adxl_init);
+
+// SPDX-License-Identifier: GPL-2.0-only
+
+/*
+ * ACPI support for platform bus type.
+ *
+ * Copyright (C) 2015, Linaro Ltd
+ * Author: Graeme Gregory <graeme.gregory@linaro.org>
+ */
+
+#include <linux/acpi.h>
+#include <linux/amba/bus.h>
+#include <linux/clkdev.h>
+#include <linux/clk-provider.h>
+#include <linux/device.h>
+#include <linux/err.h>
+#include <linux/ioport.h>
+#include <linux/kernel.h>
+#include <linux/module.h>
+
+#include "internal.h"
+
+static const struct acpi_device_id amba_id_list[] = {
+	{"ARMH0061", 0}, /* PL061 GPIO Device */
+	{"ARMHC500", 0}, /* ARM CoreSight ETM4x */
+	{"ARMHC501", 0}, /* ARM CoreSight ETR */
+	{"ARMHC502", 0}, /* ARM CoreSight STM */
+	{"ARMHC503", 0}, /* ARM CoreSight Debug */
+	{"ARMHC979", 0}, /* ARM CoreSight TPIU */
+	{"ARMHC97C", 0}, /* ARM CoreSight SoC-400 TMC, SoC-600 ETF/ETB */
+	{"ARMHC98D", 0}, /* ARM CoreSight Dynamic Replicator */
+	{"ARMHC9CA", 0}, /* ARM CoreSight CATU */
+	{"ARMHC9FF", 0}, /* ARM CoreSight Dynamic Funnel */
+	{"", 0},
+};
+
+static void amba_register_dummy_clk(void)
+{
+	static struct clk *amba_dummy_clk;
+
+	/* If clock already registered */
+	if (amba_dummy_clk)
+		return;
+
+	amba_dummy_clk = clk_register_fixed_rate(NULL, "apb_pclk", NULL, 0, 0);
+	clk_register_clkdev(amba_dummy_clk, "apb_pclk", NULL);
+}
+
+static int amba_handler_attach(struct acpi_device *adev,
+				const struct acpi_device_id *id)
+{
+	struct amba_device *dev;
+	struct resource_entry *rentry;
+	struct list_head resource_list;
+	bool address_found = false;
+	int irq_no = 0;
+	int ret;
+
+	/* If the ACPI node already has a physical device attached, skip it. */
+	if (adev->physical_node_count)
+		return 0;
+
+	dev = amba_device_alloc(dev_name(&adev->dev), 0, 0);
+	if (!dev) {
+		dev_err(&adev->dev, "%s(): amba_device_alloc() failed\n",
+			__func__);
+		return -ENOMEM;
+	}
+
+	INIT_LIST_HEAD(&resource_list);
+	ret = acpi_dev_get_resources(adev, &resource_list, NULL, NULL);
+	if (ret < 0)
+		goto err_free;
+
+	list_for_each_entry(rentry, &resource_list, node) {
+		switch (resource_type(rentry->res)) {
+		case IORESOURCE_MEM:
+			if (!address_found) {
+				dev->res = *rentry->res;
+				address_found = true;
+			}
+			break;
+		case IORESOURCE_IRQ:
+			if (irq_no < AMBA_NR_IRQS)
+				dev->irq[irq_no++] = rentry->res->start;
+			break;
+		default:
+			dev_warn(&adev->dev, "Invalid resource\n");
+			break;
+		}
+	}
+
+	acpi_dev_free_resource_list(&resource_list);
+
+	/*
+	 * If the ACPI node has a parent and that parent has a physical device
+	 * attached to it, that physical device should be the parent of
+	 * the amba device we are about to create.
+	 */
+	if (adev->parent)
+		dev->dev.parent = acpi_get_first_physical_node(adev->parent);
+
+	ACPI_COMPANION_SET(&dev->dev, adev);
+
+	ret = amba_device_add(dev, &iomem_resource);
+	if (ret) {
+		dev_err(&adev->dev, "%s(): amba_device_add() failed (%d)\n",
+		       __func__, ret);
+		goto err_free;
+	}
+
+	return 1;
+
+err_free:
+	amba_device_put(dev);
+	return ret;
+}
+
+static struct acpi_scan_handler amba_handler = {
+	.ids = amba_id_list,
+	.attach = amba_handler_attach,
+};
+
+void __init acpi_amba_init(void)
+{
+	amba_register_dummy_clk();
+	acpi_scan_add_handler(&amba_handler);
+}
