@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 from lib.dataset import RandomDatasetLoader
-from lib.model import LSTMModel
+from lib.model import LSTMEncoder
 import numpy as np
 
 
@@ -43,5 +43,5 @@ def evaluate(model, start_text, prediction_length, temperature=0.8):
 
 
 with torch.no_grad():
-    prediction = evaluate(model, "static int", 5000)
+    prediction = evaluate(model, "argv4[0]", 200)
     print("".join(prediction))

@@ -16,17 +16,17 @@ class RandomDatasetLoader(Dataset):
     def __init__(self, input_path, validation_split=0.1):
         self.data = read_whole_file(input_path)
         self.data_len = len(self.data)
-
-        # Unique characters in the database.
-        self.unique_characters = string.printable
-        self.unique_characters_length = len(self.unique_characters)
+        self.dictionary_size = len(string.printable)
 
         # Map int to character.
-        self.int2char = {i: char for i, char in enumerate(self.unique_characters)}
+        self.int2char = {i: char for i, char in enumerate(string.printable)}
         # Map character to int.
-        self.char2int = {char: i for i, char in enumerate(self.unique_characters)}
+        self.char2int = {char: i for i, char in enumerate(string.printable)}
 
         self.data_encoded = self.characters2int(self.data)
+
+    def __len__(self):
+        return len(self.data)
 
     def get_random_chunk(self, length):
         start_index = random.randint(0, self.data_len - length)

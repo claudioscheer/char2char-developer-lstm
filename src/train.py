@@ -3,7 +3,9 @@ import torch.nn as nn
 import torch.optim as optim
 
 
-def train_model(model, dataset, show_loss_plot=False, n_epochs=16, sequence_size=16):
+def train_model(
+    model, dataset, device, show_loss_plot=False, n_epochs=16, sequence_size=16
+):
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.0001)
 
@@ -22,7 +24,7 @@ def train_model(model, dataset, show_loss_plot=False, n_epochs=16, sequence_size
             train_loss += criterion(output, y[i].unsqueeze(0))
 
         train_loss.backward()
-        nn.utils.clip_grad_norm_(model.parameters(), 0.5)
+        # nn.utils.clip_grad_norm_(model.parameters(), 0.5)
         optimizer.step()
 
         # x_validation, y_validation = dataset.get_batch(batch_size=1, sequence_size=1)
