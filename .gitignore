@@ -129,3 +129,4 @@ dmypy.json
 
 !src/lib
 .vscode
+model.pytorch

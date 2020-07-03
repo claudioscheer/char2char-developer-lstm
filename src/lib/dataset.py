@@ -55,17 +55,3 @@ class RandomDatasetLoader(Dataset):
 
     def int2characters(self, characters):
         return [self.int2char[c] for c in characters]
-
-    # def one_hot_encode(self, characters):
-    #     batches = characters.shape[0]
-    #     sequence_size = characters.shape[1]
-    #     encoded = np.zeros(
-    #         [batches, sequence_size, self.unique_characters_length], dtype=int,
-    #     )
-    #     for i in range(batches):
-    #         for j in range(sequence_size):
-    #             encoded[i][j][characters[i][j]] = 1
-    #     return encoded
-
-    # def one_hot_decode(self, characters):
-    #     return [np.argmax(x) for x in characters]
