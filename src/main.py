@@ -2,56 +2,53 @@ import os
 import numpy as np
 import torch
 import torch.nn as nn
-from lib.dataset import RandomDatasetLoader
+from lib.dataset import DatasetLoader
 from lib.char2char import Char2Char
-from lib.encoder import Encoder
-from lib.decoder import Decoder
 from train import train_model
+from predict import sample
 
 
 def count_model_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
-def init_weights(m):
-    for _, param in m.named_parameters():
-        nn.init.uniform_(param.data, -0.08, 0.08)
-
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 file_path = os.path.dirname(os.path.abspath(__file__))
-dataset = RandomDatasetLoader(os.path.join(file_path, "../dataset/source-code.txt"))
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+dataset = DatasetLoader(os.path.join(file_path, "../dataset/source-code.txt"))
 
 # Define hyperparameters.
 dictionary_size = dataset.dictionary_size
-embedding_dim = 128
-lstm_hidden_size = 256
+lstm_hidden_size = 512
 number_lstm_layers = 2
-dropout_probability = 0.5
+dropout_probability = 0.3
 output_size = dataset.dictionary_size
+sequences_per_batch = 16
+sequence_length = 16
+learning_rate = 1e-5
+number_epochs = 512
 
-encoder = Encoder(
+model = Char2Char(
     dictionary_size,
-    embedding_dim,
-    lstm_hidden_size,
-    number_lstm_layers,
-    dropout_probability,
-)
-decoder = Decoder(
-    lstm_hidden_size,
-    embedding_dim,
     lstm_hidden_size,
     number_lstm_layers,
     dropout_probability,
     output_size,
-)
-model = Char2Char(encoder, decoder, device).to(device)
-model.apply(init_weights)
-
-print(model)
+    device,
+).to(device)
 
 model = train_model(
-    model, dataset, device, show_loss_plot=True, n_epochs=128, sequence_size=256
+    model,
+    dataset,
+    device,
+    sequences_per_batch=sequences_per_batch,
+    sequence_length=sequence_length,
+    epochs=number_epochs,
+    learning_rate=learning_rate,
+    show_loss_plot=True,
 )
-torch.save(model, "../model.pytorch")
+
+output = sample(
+    model, dataset, device, 100, "int adxl_decode(u64 addr, u64 component_values"
+)
+print(output)

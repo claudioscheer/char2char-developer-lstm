@@ -1,38 +1,73 @@
 import torch
 import torch.nn as nn
-import random
+import torch.nn.functional as F
+import numpy as np
 
 
 class Char2Char(nn.Module):
-    def __init__(self, encoder, decoder, device):
+    def __init__(
+        self,
+        dictionary_size,
+        lstm_hidden_size,
+        number_lstm_layers,
+        dropout_probability,
+        output_size,
+        device,
+    ):
         super(Char2Char, self).__init__()
 
-        self.encoder = encoder
-        self.decoder = decoder
         self.device = device
+        self.lstm_hidden_size = lstm_hidden_size
+        self.number_lstm_layers = number_lstm_layers
+        self.dictionary_size = dictionary_size
 
-        assert (
-            encoder.lstm_hidden_size == decoder.lstm_hidden_size
-        ), "Hidden dimensions of encoder and decoder must be equal."
-        assert (
-            encoder.number_lstm_layers == decoder.number_lstm_layers
-        ), "Encoder and decoder must have the same number of layers."
+        self.lstm = nn.LSTM(
+            input_size=dictionary_size,
+            hidden_size=lstm_hidden_size,
+            num_layers=number_lstm_layers,
+            dropout=dropout_probability,
+        )
+        self.dropout = nn.Dropout(dropout_probability)
+        self.fc = nn.Linear(in_features=lstm_hidden_size, out_features=output_size)
 
-    def forward(self, x, y, teacher_forcing_ratio=0.5):
-        batch_size = y.shape[1]
-        y_len = y.shape[0]
-        y_vocab_size = self.decoder.output_size
+    def forward(self, x, previous_hidden_states):
+        x, (h, c) = self.lstm(x, previous_hidden_states)
+        x = self.dropout(x)
+        x = x.view(x.size()[0] * x.size()[1], self.lstm_hidden_size)
+        x = self.fc(x)
+        return x, (h, c)
 
-        outputs = torch.zeros(y_len, batch_size, y_vocab_size).to(self.device)
+    def predict(self, char, dataset, device, previous_hidden_states, top_k=5):
+        self.to(device)
+        x = np.array([[dataset.char2int[char]]])
+        x = dataset.one_hot_encode(x)
 
-        hidden_states = self.encoder(x)
-        y_input = y[0, :]
+        inputs = torch.from_numpy(x).to(device)
 
-        for next_y in range(1, y_len):
-            output, hidden_states = self.decoder(y_input, hidden_states)
-            outputs[next_y] = output
-            teacher_force = random.random() < teacher_forcing_ratio
-            top1 = output.argmax(1)
-            y_input = y[next_y] if teacher_force else top1
+        previous_hidden_states = tuple([each.data for each in previous_hidden_states])
+        out, previous_hidden_states = self.forward(inputs, previous_hidden_states)
 
-        return outputs
+        p = F.softmax(out, dim=1).data
+        p = p.cpu()
+
+        p, top_ch = p.topk(top_k)
+        top_ch = top_ch.numpy().squeeze()
+        p = p.numpy().squeeze()
+        char = np.random.choice(top_ch, p=p / p.sum())
+        return dataset.int2char[char], previous_hidden_states
+
+    def init_hidden(self, sequences_per_batch):
+        weight = next(self.parameters()).data
+        return (
+            weight.new(
+                self.number_lstm_layers, sequences_per_batch, self.lstm_hidden_size
+            )
+            .zero_()
+            .to(self.device),
+            weight.new(
+                self.number_lstm_layers, sequences_per_batch, self.lstm_hidden_size
+            )
+            .zero_()
+            .to(self.device),
+        )
+

@@ -2,56 +2,57 @@ import unidecode
 import string
 import torch
 from torch.utils.data.dataset import Dataset
-from torch.autograd import Variable
 import numpy as np
 import random
 
 
 def read_whole_file(input_path):
     with open(input_path, mode="r") as file:
-        return unidecode.unidecode(file.read())
+        return file.read()
 
 
-class RandomDatasetLoader(Dataset):
+class DatasetLoader(Dataset):
     def __init__(self, input_path, validation_split=0.1):
         self.data = read_whole_file(input_path)
-        self.data_len = len(self.data)
         self.dictionary_size = len(string.printable)
 
-        # Map int to character.
         self.int2char = {i: char for i, char in enumerate(string.printable)}
-        # Map character to int.
         self.char2int = {char: i for i, char in enumerate(string.printable)}
+        self.data_encoded = np.array(self.characters2int(self.data))
 
-        self.data_encoded = self.characters2int(self.data)
+        validation_index = int(len(self.data_encoded) * (1 - validation_split))
+        train_data, validation_data = (
+            self.data_encoded[:validation_index],
+            self.data_encoded[validation_index:],
+        )
+        self.train_data = train_data
+        self.validation_data = validation_data
 
-    def __len__(self):
-        return len(self.data)
+    def get_train_batch(self, sequences_per_batch, sequence_length):
+        batch_size = sequences_per_batch * sequence_length
+        number_batches = len(self.train_data) // batch_size
+        data = self.train_data[: number_batches * batch_size]
+        data = data.reshape((sequences_per_batch, -1))
 
-    def get_random_chunk(self, length):
-        start_index = random.randint(0, self.data_len - length)
-        end_index = start_index + length
-        return self.data_encoded[start_index:end_index]
-
-    def get_batch(self, sequence_size=16):
-        # Required because 1 element is removed from x and y.
-        sequence_size += 1
-
-        chunk = self.get_random_chunk(sequence_size)
-        # Ensure that random chunk has the sequence size.
-        while len(chunk) != sequence_size:
-            chunk = self.get_random_chunk(sequence_size)
-        # Remove last character.
-        x = chunk[:-1]
-        # Remove first character.
-        y = chunk[1:]
-
-        x = torch.tensor(x).cuda()
-        y = torch.tensor(y).cuda()
-        return Variable(x), Variable(y)
+        for n in range(0, data.shape[1], sequence_length):
+            x = data[:, n : n + sequence_length]
+            y = np.zeros_like(x)
+            try:
+                y[:, :-1], y[:, -1] = x[:, 1:], data[:, n + sequence_length]
+            except IndexError:
+                y[:, :-1], y[:, -1] = x[:, 1:], data[:, 0]
+            yield x, y
 
     def characters2int(self, characters):
         return [self.char2int[c] for c in characters]
 
     def int2characters(self, characters):
         return [self.int2char[c] for c in characters]
+
+    def one_hot_encode(self, data):
+        one_hot = np.zeros(
+            (np.multiply(*data.shape), self.dictionary_size), dtype=np.float32
+        )
+        one_hot[np.arange(one_hot.shape[0]), data.flatten()] = 1.0
+        one_hot = one_hot.reshape((*data.shape, self.dictionary_size))
+        return one_hot
