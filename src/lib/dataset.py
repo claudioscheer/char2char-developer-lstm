@@ -12,7 +12,7 @@ def read_whole_file(input_path):
 
 
 class DatasetLoader(Dataset):
-    def __init__(self, input_path, validation_split=0.1):
+    def __init__(self, input_path, validation_split=0.0):
         self.data = read_whole_file(input_path)
         self.dictionary_size = len(string.printable)
 
@@ -45,14 +45,3 @@ class DatasetLoader(Dataset):
 
     def characters2int(self, characters):
         return [self.char2int[c] for c in characters]
-
-    def int2characters(self, characters):
-        return [self.int2char[c] for c in characters]
-
-    def one_hot_encode(self, data):
-        one_hot = np.zeros(
-            (np.multiply(*data.shape), self.dictionary_size), dtype=np.float32
-        )
-        one_hot[np.arange(one_hot.shape[0]), data.flatten()] = 1.0
-        one_hot = one_hot.reshape((*data.shape, self.dictionary_size))
-        return one_hot
